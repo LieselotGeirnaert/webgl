@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <script type="module">
+    import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r120/three.module.js';
+
+    const main = () => {
+      // canvas and renderer
+      const canvas = document.querySelector('#c');
+      const renderer = new THREE.WebGLRenderer({ canvas });
+
+      // camera
+      const fov = 75;
+      const aspect = 2;  // the canvas default
+      const near = 0.1;
+      const far = 5;
+      const camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
+      camera.position.z = 2;
+
+      // scene
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xAAAAAA);
+    
+      // const boxWidth = 1;
+      // const boxHeight = 1;
+      // const boxDepth = 1;
+      // const geometry = new THREE.BoxGeometry(boxWidth, boxHeight, boxDepth);
+
+      const radius = 1.0;
+      const widthSegments = 30;
+      const heightSegments = 30;
+      const geometry = new THREE.SphereGeometry(radius, widthSegments, heightSegments);
+
+      // // light
+      // const color = 0xFFFFFF;
+      // const intensity = 1;
+      // const light = new THREE.DirectionalLight(color, intensity);
+      // light.position.set(-1, 2, 4);
+      // scene.add(light);
+
+
+      // instances
+      const objects = [];
+
+      // material
+      // const material = new THREE.MeshPhongMaterial({ color: 0x44aa88 });
+     
+      const fragmentShader = `
+        #include <common>
+
+        uniform vec3 iResolution;
+        uniform float iTime;
+        uniform sampler2D iChannel0;
+
+        // By Daedelus: https://www.shadertoy.com/user/Daedelus
+        // license: Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
+        #define TIMESCALE 0.25
+        #define TILES 8
+        #define COLOR 0.7, 1.6, 2.8
+
+        void mainImage( out vec4 fragColor, in vec2 fragCoord )
+        {
+            vec2 uv = fragCoord.xy / iResolution.xy;
+            uv.x *= iResolution.x / iResolution.y;
+
+            vec4 noise = texture2D(iChannel0, floor(uv * float(TILES)) / float(TILES));
+            float p = 1.0 - mod(noise.r + noise.g + noise.b + iTime * float(TIMESCALE), 1.0);
+            p = min(max(p * 3.0 - 1.8, 0.1), 2.0);
+
+            vec2 r = mod(uv * float(TILES), 1.0);
+            r = vec2(pow(r.x - 0.5, 2.0), pow(r.y - 0.5, 2.0));
+            p *= 1.0 - pow(min(1.0, 12.0 * dot(r, r)), 2.0);
+
+            fragColor = vec4(COLOR, 1.0) * p;
+        }
+        varying vec2 vUv;
+
+        void main() {
+          mainImage(gl_FragColor, vUv * iResolution.xy);
+        }
+      `;
+
+      const vertexShader = `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+        }
+      `;
+
+      const loader = new THREE.TextureLoader();
+      const texture = loader.load('https://threejsfundamentals.org/threejs/resources/images/bayer.png');
+      texture.minFilter = THREE.NearestFilter;
+      texture.magFilter = THREE.NearestFilter;
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+
+      const uniforms = {
+        iTime: { value: 0 },
+        iResolution: { value: new THREE.Vector3(1, 1, 1) },
+        iChannel0: { value: texture },
+      };
+
+      const material = new THREE.ShaderMaterial({
+        vertexShader,
+        fragmentShader,
+        uniforms,
+      });
+
+      // const material = new THREE.ShaderMaterial({
+      //   fragmentShader,
+      //   uniforms,
+      // });
+
+      // add to scene
+      const cube = new THREE.Mesh(geometry, material);
+
+      scene.add(cube);
+      objects.push(cube);
+
+      // resize screen
+      const resizeRendererToDisplaySize = (renderer) => {
+        const canvas = renderer.domElement;
+        const pixelRatio = window.devicePixelRatio;
+        const width = canvas.clientWidth;
+        const height = canvas.clientHeight;
+        const needResize = canvas.width !== width || canvas.height !== height;
+        if (needResize) {
+          renderer.setSize(width, height, false);
+        }
+        return needResize;
+      }
+
+      // render everything
+      const render = (time) => {
+        time *= 0.001;
+
+        if (resizeRendererToDisplaySize(renderer)) {
+          const canvas = renderer.domElement;
+          camera.aspect = canvas.clientWidth / canvas.clientHeight;
+          camera.updateProjectionMatrix();
+        }
+
+        objects.forEach((obj) => {
+          const speed = 0.5;
+          const rot = time * speed;
+          obj.rotation.x = rot;
+          obj.rotation.y = rot;
+        });
+        uniforms.iTime.value = time;
+
+        renderer.render(scene, camera);
+
+        requestAnimationFrame(render);
+      }
+      requestAnimationFrame(render);
+    }
+
+    
+    main();
+  </script>
+</body>
+</html>
